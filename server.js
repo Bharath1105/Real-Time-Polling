@@ -20,6 +20,45 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+// Enhanced logging utility
+const logger = {
+  info: (message, data = {}) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] INFO: ${message}`, data);
+  },
+  error: (message, error = null, data = {}) => {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] ERROR: ${message}`, error ? error.message : '', data);
+  },
+  warn: (message, data = {}) => {
+    const timestamp = new Date().toISOString();
+    console.warn(`[${timestamp}] WARN: ${message}`, data);
+  },
+  success: (message, data = {}) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] SUCCESS: ${message}`, data);
+  },
+  auth: (action, user = null, data = {}) => {
+    const timestamp = new Date().toISOString();
+    const userInfo = user ? `User: ${user.name} (${user.email})` : 'Unknown user';
+    console.log(`[${timestamp}] AUTH: ${action} - ${userInfo}`, data);
+  },
+  poll: (action, pollId = null, data = {}) => {
+    const timestamp = new Date().toISOString();
+    const pollInfo = pollId ? `Poll ID: ${pollId}` : 'Unknown poll';
+    console.log(`[${timestamp}] POLL: ${action} - ${pollInfo}`, data);
+  },
+  websocket: (action, socketId = null, data = {}) => {
+    const timestamp = new Date().toISOString();
+    const socketInfo = socketId ? `Socket: ${socketId}` : 'Unknown socket';
+    console.log(`[${timestamp}] WEBSOCKET: ${action} - ${socketInfo}`, data);
+  },
+  api: (method, path, status, data = {}) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] API: ${method} ${path} - Status: ${status}`, data);
+  }
+};
+
 // User tracking
 const activeUsers = new Map(); // userId -> { user, loginTime, socketId }
 const userSessions = []; // Array of all user sessions for tracking
@@ -37,11 +76,36 @@ const ALLOWED_IPS = [
 // For public access, you can disable IP whitelist by setting this to true
 const DISABLE_IP_WHITELIST = true;
 
+// API request logging middleware
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  
+  // Log the incoming request
+  logger.api(req.method, req.path, 'STARTED', {
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    timestamp: new Date().toISOString()
+  });
+  
+  // Override res.json to log responses
+  const originalJson = res.json;
+  res.json = function(data) {
+    const duration = Date.now() - startTime;
+    logger.api(req.method, req.path, res.statusCode, {
+      duration: `${duration}ms`,
+      responseSize: JSON.stringify(data).length
+    });
+    return originalJson.call(this, data);
+  };
+  
+  next();
+});
+
 // IP Whitelist Middleware
 const ipWhitelist = (req, res, next) => {
   // Skip IP whitelist if disabled for public access
   if (DISABLE_IP_WHITELIST) {
-    console.log('IP whitelist disabled - allowing all connections');
+    logger.info('IP whitelist disabled - allowing all connections');
     return next();
   }
   
@@ -62,12 +126,12 @@ const ipWhitelist = (req, res, next) => {
     actualIP = actualIP.substring(7);
   }
   
-  console.log(`Request from IP: ${actualIP}`);
+  logger.info(`Request from IP: ${actualIP}`);
   
   if (ALLOWED_IPS.includes(actualIP)) {
     next();
   } else {
-    console.log(`Blocked request from IP: ${actualIP}`);
+    logger.warn(`Blocked request from IP: ${actualIP}`, { ip: actualIP });
     res.status(403).json({ 
       error: 'Access denied. Your IP address is not whitelisted.',
       yourIP: actualIP,
@@ -174,9 +238,14 @@ app.post('/api/users', async (req, res) => {
       }
     });
 
+    logger.auth('USER_REGISTERED', user, { 
+      userId: user.id, 
+      email: user.email,
+      name: user.name 
+    });
     res.status(201).json(user);
   } catch (error) {
-    console.error('Error creating user:', error);
+    logger.error('Error creating user:', error, { email: req.body.email });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -233,8 +302,13 @@ app.post('/api/users/login', async (req, res) => {
       logoutTime: null
     });
 
-    console.log(`User logged in: ${user.name} (${user.email}) at ${loginTime.toLocaleString()}`);
-    console.log(`Total active users: ${activeUsers.size}`);
+    logger.auth('USER_LOGGED_IN', user, { 
+      userId: user.id,
+      loginTime: loginTime.toISOString(),
+      totalActiveUsers: activeUsers.size,
+      socketId: null // Will be set when WebSocket connects
+    });
+    logger.info(`Total active users: ${activeUsers.size}`);
 
     res.json({
       token,
@@ -245,7 +319,7 @@ app.post('/api/users/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error logging in user:', error);
+    logger.error('Error logging in user:', error, { email: req.body.email });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -289,7 +363,7 @@ app.get('/api/users', async (req, res) => {
 
     res.json(users);
   } catch (error) {
-    console.error('Error fetching users:', error);
+    logger.error('Error fetching users:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -322,7 +396,7 @@ app.get('/api/users/:id', authenticateToken, async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    console.error('Error fetching user:', error);
+    logger.error('Error fetching user:', error, { userId: req.params.id });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -358,9 +432,15 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
       }
     });
 
+    logger.poll('POLL_CREATED', poll.id, {
+      userId: user.id,
+      question: poll.question,
+      optionsCount: poll.options.length,
+      isPublished: poll.isPublished
+    });
     res.status(201).json(poll);
   } catch (error) {
-    console.error('Error creating poll:', error);
+    logger.error('Error creating poll:', error, { userId: user.id });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -400,7 +480,7 @@ app.get('/api/polls', async (req, res) => {
 
     res.json(polls);
   } catch (error) {
-    console.error('Error fetching polls:', error);
+    logger.error('Error fetching polls:', error, { published: req.query.published });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -435,7 +515,7 @@ app.get('/api/polls/:id', async (req, res) => {
 
     res.json(poll);
   } catch (error) {
-    console.error('Error fetching poll:', error);
+    logger.error('Error fetching poll:', error, { pollId: req.params.id });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -477,9 +557,22 @@ app.patch('/api/polls/:id/publish', authenticateToken, async (req, res) => {
       }
     });
 
+    logger.poll('POLL_PUBLISHED', pollId, {
+      userId: user.id,
+      question: updatedPoll.question,
+      totalVotes: updatedPoll.totalVotes
+    });
+    
+    // Emit real-time update to all connected clients
+    io.emit('pollPublished', {
+      pollId: updatedPoll.id,
+      question: updatedPoll.question,
+      publishedAt: updatedPoll.updatedAt
+    });
+    
     res.json(updatedPoll);
   } catch (error) {
-    console.error('Error publishing poll:', error);
+    logger.error('Error publishing poll:', error, { pollId, userId: user.id });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -573,72 +666,156 @@ app.post('/api/votes', authenticateToken, async (req, res) => {
       }))
     });
 
+    logger.poll('VOTE_CAST', pollId, {
+      userId: user.id,
+      optionId: optionId,
+      pollQuestion: poll.question,
+      optionText: option.text
+    });
+    
+    // Emit real-time update to all clients in the poll room
+    io.to(`poll-${pollId}`).emit('voteCast', {
+      pollId: pollId,
+      optionId: optionId,
+      totalVotes: poll.totalVotes,
+      optionVotes: option.votes
+    });
+    
     res.status(201).json(vote);
   } catch (error) {
-    console.error('Error creating vote:', error);
+    logger.error('Error creating vote:', error, { pollId, userId: user.id, optionId });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // WebSocket connection handling
 io.on('connection', (socket) => {
-  console.log('WebSocket connected:', socket.id);
+  logger.websocket('CONNECTED', socket.id, {
+    ip: socket.handshake.address,
+    userAgent: socket.handshake.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  });
 
   // Join a specific poll room for real-time updates
   socket.on('joinPoll', (pollId) => {
     socket.join(`poll-${pollId}`);
-    console.log(`User ${socket.id} joined poll ${pollId}`);
+    logger.websocket('JOINED_POLL', socket.id, { pollId });
   });
 
   // Leave a poll room
   socket.on('leavePoll', (pollId) => {
     socket.leave(`poll-${pollId}`);
-    console.log(`User ${socket.id} left poll ${pollId}`);
+    logger.websocket('LEFT_POLL', socket.id, { pollId });
   });
 
   // Handle user identification when they connect
   socket.on('identifyUser', (userId) => {
     if (activeUsers.has(userId)) {
-      activeUsers.get(userId).socketId = socket.id;
-      console.log(`User ${userId} identified with socket ${socket.id}`);
+      const userData = activeUsers.get(userId);
+      userData.socketId = socket.id;
+      logger.websocket('USER_IDENTIFIED', socket.id, { 
+        userId, 
+        userName: userData.user.name,
+        userEmail: userData.user.email 
+      });
+    } else {
+      logger.warn('Unknown user tried to identify with socket', { userId, socketId: socket.id });
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('WebSocket disconnected:', socket.id);
+  socket.on('disconnect', (reason) => {
+    logger.websocket('DISCONNECTED', socket.id, { 
+      reason,
+      timestamp: new Date().toISOString()
+    });
     
     // Find and remove user from active users if they disconnect
     for (let [userId, userData] of activeUsers.entries()) {
       if (userData.socketId === socket.id) {
         activeUsers.delete(userId);
-        console.log(`User ${userData.user.name} disconnected from WebSocket`);
-        console.log(`Remaining active users: ${activeUsers.size}`);
+        logger.auth('USER_DISCONNECTED', userData.user, {
+          userId,
+          socketId: socket.id,
+          sessionDuration: Date.now() - userData.loginTime.getTime(),
+          remainingActiveUsers: activeUsers.size
+        });
         break;
       }
     }
   });
 });
 
+// Stats endpoint for admin dashboard
+app.get('/api/stats', async (req, res) => {
+  try {
+    const totalUsers = await prisma.user.count();
+    const totalPolls = await prisma.poll.count();
+    const publishedPolls = await prisma.poll.count({ where: { isPublished: true } });
+    const totalVotes = await prisma.vote.count();
+    
+    // Get active users data
+    const activeUsersData = Array.from(activeUsers.values()).map(userData => ({
+      id: userData.user.id,
+      name: userData.user.name,
+      email: userData.user.email,
+      loginTime: userData.loginTime,
+      socketId: userData.socketId
+    }));
+    
+    const stats = {
+      totalUsers,
+      totalPolls,
+      publishedPolls,
+      totalVotes,
+      activeUsers: activeUsersData,
+      activeUserCount: activeUsers.size,
+      timestamp: new Date().toISOString()
+    };
+    
+    logger.info('Stats requested', { 
+      totalUsers, 
+      totalPolls, 
+      activeUserCount: activeUsers.size 
+    });
+    
+    res.json(stats);
+  } catch (error) {
+    logger.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
+  logger.error('Unhandled error:', error, {
+    path: req.path,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
   res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`WebSocket server ready for connections`);
-  console.log(`Access from other devices:`);
-  console.log(`- Local: http://localhost:${PORT}`);
-  console.log(`- Network: http://[YOUR_IP_ADDRESS]:${PORT}`);
-  console.log(`- Find your IP with: ipconfig`);
+  logger.success('Server started successfully', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
+  });
+  logger.info('WebSocket server ready for connections');
+  logger.info('Server access URLs:', {
+    local: `http://localhost:${PORT}`,
+    network: `http://[YOUR_IP_ADDRESS]:${PORT}`,
+    render: 'https://real-time-polling.onrender.com'
+  });
 });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Shutting down gracefully...');
+  logger.info('Shutting down gracefully...');
   await prisma.$disconnect();
+  logger.info('Database disconnected, server shutdown complete');
   process.exit(0);
 });
 

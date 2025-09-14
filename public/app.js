@@ -4,6 +4,9 @@ let authToken = null;
 let socket = null;
 let currentPollId = null;
 
+// Server configuration
+const SERVER_URL = 'https://real-time-polling.onrender.com';
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     // Check if user is already logged in
@@ -32,7 +35,7 @@ async function login() {
     }
     
     try {
-        const response = await fetch('/api/users/login', {
+        const response = await fetch(`${SERVER_URL}/api/users/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -77,7 +80,7 @@ async function register() {
     }
     
     try {
-        const response = await fetch('/api/users', {
+        const response = await fetch(`${SERVER_URL}/api/users`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -260,7 +263,7 @@ async function createPoll() {
     }
     
     try {
-        const response = await fetch('/api/polls', {
+        const response = await fetch(`${SERVER_URL}/api/polls`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -309,7 +312,7 @@ async function publishPoll() {
         
         if (createResponse.ok) {
             // Then publish it
-            const publishResponse = await fetch(`/api/polls/${pollData.id}/publish`, {
+            const publishResponse = await fetch(`${SERVER_URL}/api/polls/${pollData.id}/publish`, {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${authToken}`
@@ -333,7 +336,7 @@ async function publishPoll() {
 
 async function loadPolls() {
     try {
-        const response = await fetch('/api/polls');
+        const response = await fetch(`${SERVER_URL}/api/polls`);
         const polls = await response.json();
         
         displayPolls(polls);
@@ -380,7 +383,7 @@ async function vote(optionId, pollId) {
     }
     
     try {
-        const response = await fetch('/api/votes', {
+        const response = await fetch(`${SERVER_URL}/api/votes`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -404,7 +407,7 @@ async function vote(optionId, pollId) {
 
 // WebSocket functions
 function connectWebSocket() {
-    socket = io();
+    socket = io(SERVER_URL);
     
     socket.on('connect', () => {
         console.log('Connected to WebSocket server');
