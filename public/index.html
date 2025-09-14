@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Polling App</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .auth-section {
+            display: none;
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .auth-section.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-right: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .polls-section {
+            display: none;
+        }
+
+        .polls-section.active {
+            display: block;
+        }
+
+        .poll-card {
+            background: white;
+            border: 2px solid #e1e5e9;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .poll-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .poll-question {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .poll-options {
+            margin-bottom: 20px;
+        }
+
+        .option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .option:hover {
+            background: #e9ecef;
+        }
+
+        .option input[type="radio"] {
+            margin-right: 15px;
+            transform: scale(1.2);
+        }
+
+        .option-text {
+            flex: 1;
+            font-size: 1.1rem;
+        }
+
+        .vote-count {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .poll-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-published {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-draft {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .create-poll-section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .create-poll-section h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .option-input {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .option-input input {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        .remove-option {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .add-option {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .user-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .real-time-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .real-time-indicator.active {
+            display: block;
+        }
+
+        .header .logout-btn:hover {
+            background: rgba(255,255,255,0.3) !important;
+            border-color: rgba(255,255,255,0.5) !important;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            .main-content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="real-time-indicator" id="realTimeIndicator">
+        <i class="fas fa-wifi"></i> Real-time Connected
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1><i class="fas fa-poll"></i> Real-Time Polling</h1>
+                    <p>Create polls and vote in real-time!</p>
+                </div>
+                <div id="headerUserInfo" style="display: none;">
+                    <span style="margin-right: 15px; font-size: 1.1rem;">Welcome, <strong id="headerUserName"></strong>!</span>
+                    <button class="logout-btn" onclick="logout()" style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); color: white; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.3s;">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Authentication Section -->
+            <div class="auth-section active" id="authSection">
+                <div class="user-info" id="pollsUserInfo" style="display: none;">
+                    <span>Welcome, <strong id="pollsUserName"></strong>!</span>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+
+                <div id="loginForm">
+                    <h3><i class="fas fa-sign-in-alt"></i> Login</h3>
+                    <div class="form-group">
+                        <label for="loginEmail">Email:</label>
+                        <input type="email" id="loginEmail" placeholder="Enter your email">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password">
+                    </div>
+                    <button class="btn" onclick="login()">Login</button>
+                    <button class="btn btn-secondary" onclick="showRegisterForm()">Create Account</button>
+                </div>
+
+                <div id="registerForm" style="display: none;">
+                    <h3><i class="fas fa-user-plus"></i> Create Account</h3>
+                    <div class="form-group">
+                        <label for="registerName">Name:</label>
+                        <input type="text" id="registerName" placeholder="Enter your name">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email:</label>
+                        <input type="email" id="registerEmail" placeholder="Enter your email">
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Password:</label>
+                        <input type="password" id="registerPassword" placeholder="Enter your password">
+                    </div>
+                    <button class="btn" onclick="register()">Create Account</button>
+                    <button class="btn btn-secondary" onclick="showLoginForm()">Back to Login</button>
+                </div>
+            </div>
+
+            <!-- Polls Section -->
+            <div class="polls-section" id="pollsSection">
+                <!-- User Info and Logout -->
+                <div class="user-info" id="pollsUserInfo" style="display: none;">
+                    <span>Welcome, <strong id="pollsUserName"></strong>!</span>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
+                </div>
+                
+                <!-- Create Poll Section -->
+                <div class="create-poll-section">
+                    <h3><i class="fas fa-plus-circle"></i> Create New Poll</h3>
+                    <div class="form-group">
+                        <label for="pollQuestion">Poll Question:</label>
+                        <input type="text" id="pollQuestion" placeholder="What is your favorite programming language?">
+                    </div>
+                    <div class="form-group">
+                        <label>Options:</label>
+                        <div id="pollOptions">
+                            <div class="option-input">
+                                <input type="text" placeholder="Option 1" class="poll-option">
+                                <button class="remove-option" onclick="removeOption(this)">×</button>
+                            </div>
+                            <div class="option-input">
+                                <input type="text" placeholder="Option 2" class="poll-option">
+                                <button class="remove-option" onclick="removeOption(this)">×</button>
+                            </div>
+                        </div>
+                        <button class="add-option" onclick="addOption()">+ Add Option</button>
+                    </div>
+                    <button class="btn" onclick="createPoll()">Create Poll</button>
+                    <button class="btn btn-secondary" onclick="publishPoll()">Create & Publish</button>
+                </div>
+
+                <!-- Polls List -->
+                <div id="pollsList">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading polls...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
