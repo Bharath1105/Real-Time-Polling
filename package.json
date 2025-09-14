@@ -1,9 +1,10 @@
 {
   "name": "realtime-polling-backend",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node index.js",
+    "build": "prisma generate",
     "dev": "nodemon server.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
