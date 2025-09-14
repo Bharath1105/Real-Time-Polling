@@ -4,7 +4,7 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+// Prisma configuration - automatically chooses between Accelerate and regular client
 require('dotenv').config();
 
 const app = express();
@@ -16,7 +16,7 @@ const io = new Server(server, {
   }
 });
 
-const prisma = new PrismaClient();
+const prisma = require('./prisma-config');
 const PORT = process.env.PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
