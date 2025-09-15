@@ -4,6 +4,7 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
 // Prisma configuration - automatically chooses between Accelerate and regular client
 require('dotenv').config();
 

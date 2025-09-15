@@ -1,0 +1,77 @@
+// Production schema for cloud database deployment
+// This schema is optimized for PostgreSQL (recommended for Prisma Accelerate)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  passwordHash String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // One-to-Many: A User can create many Polls
+  polls       Poll[]
+  
+  // Many-to-Many: A User can vote on many PollOptions
+  votes       Vote[]
+
+  @@map("users")
+}
+
+model Poll {
+  id          String   @id @default(cuid())
+  question    String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // One-to-Many: A Poll belongs to one User (creator)
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  // One-to-Many: A Poll can have multiple PollOptions
+  options     PollOption[]
+
+  @@map("polls")
+}
+
+model PollOption {
+  id          String   @id @default(cuid())
+  text        String
+  createdAt   DateTime @default(now())
+
+  // One-to-Many: A PollOption belongs to one Poll
+  pollId      String
+  poll        Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  // Many-to-Many: A PollOption can be voted on by many Users
+  votes       Vote[]
+
+  @@map("poll_options")
+}
+
+model Vote {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+
+  // Many-to-Many: A Vote connects a User and a PollOption
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  pollOptionId String
+  pollOption  PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
+
+  // Ensure a user can only vote once per poll option
+  @@unique([userId, pollOptionId])
+  @@map("votes")
+}
+
