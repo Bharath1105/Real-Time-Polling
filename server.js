@@ -405,7 +405,7 @@ app.get('/api/users/:id', authenticateToken, async (req, res) => {
 // Poll Routes
 app.post('/api/polls', authenticateToken, async (req, res) => {
   try {
-    const { question, options } = req.body;
+    const { question, options, allowMultiple } = req.body;
 
     if (!question || !options || !Array.isArray(options) || options.length < 2) {
       return res.status(400).json({ error: 'Question and at least 2 options are required' });
@@ -414,6 +414,7 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
     const poll = await prisma.poll.create({
       data: {
         question,
+        allowMultiple: Boolean(allowMultiple),
         creatorId: req.user.userId,
         options: {
           create: options.map(optionText => ({
@@ -437,7 +438,8 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
       userId: req.user.userId,
       question: poll.question,
       optionsCount: poll.options.length,
-      isPublished: poll.isPublished
+      isPublished: poll.isPublished,
+      allowMultiple: poll.allowMultiple
     });
     res.status(201).json(poll);
   } catch (error) {
@@ -677,18 +679,30 @@ app.post('/api/votes', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Cannot vote on unpublished poll' });
     }
 
-    // Check if user already voted on this poll option
-    const existingVote = await prisma.vote.findUnique({
-      where: {
-        userId_pollOptionId: {
+    // If single-select poll, ensure the user doesn't already have a vote on any option of this poll
+    if (!pollOption.poll.allowMultiple) {
+      const votedAlready = await prisma.vote.findFirst({
+        where: {
           userId: req.user.userId,
-          pollOptionId
+          pollOption: { pollId: pollOption.poll.id }
         }
+      });
+      if (votedAlready) {
+        return res.status(400).json({ error: 'You can only vote once in this poll' });
       }
-    });
-
-    if (existingVote) {
-      return res.status(400).json({ error: 'You have already voted on this option' });
+    } else {
+      // For multi-select, prevent duplicate votes on the same option
+      const existingVote = await prisma.vote.findUnique({
+        where: {
+          userId_pollOptionId: {
+            userId: req.user.userId,
+            pollOptionId
+          }
+        }
+      });
+      if (existingVote) {
+        return res.status(400).json({ error: 'You have already voted on this option' });
+      }
     }
 
     // Create vote

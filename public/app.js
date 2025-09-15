@@ -263,13 +263,14 @@ async function createPoll() {
     }
     
     try {
+        const allowMultiple = document.getElementById('allowMultiple').checked;
         const response = await fetch(`${SERVER_URL}/api/polls`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ question, options })
+            body: JSON.stringify({ question, options, allowMultiple })
         });
         
         const data = await response.json();
@@ -298,6 +299,7 @@ async function publishPoll() {
     }
     
     try {
+        const allowMultiple = document.getElementById('allowMultiple').checked;
         // First create the poll
         const createResponse = await fetch('/api/polls', {
             method: 'POST',
@@ -305,7 +307,7 @@ async function publishPoll() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
             },
-            body: JSON.stringify({ question, options })
+            body: JSON.stringify({ question, options, allowMultiple })
         });
         
         const pollData = await createResponse.json();
@@ -358,8 +360,8 @@ function displayPolls(polls) {
             <div class="poll-question">${poll.question}</div>
             <div class="poll-options">
                 ${poll.options.map(option => `
-                    <div class="option" onclick="vote('${option.id}', '${poll.id}')">
-                        <input type="radio" name="poll-${poll.id}" value="${option.id}">
+                    <div class="option" onclick="${'${poll.allowMultiple ? `toggleSelect(\'' + option.id + '\', \'${poll.id}\')` : `vote(\'' + option.id + '\', \'${poll.id}\')` }'}">
+                        ${'${poll.allowMultiple ? `<input type=\'checkbox\' name=\'poll-${poll.id}\' value=\'${option.id}\'>` : `<input type=\'radio\' name=\'poll-${poll.id}\' value=\'${option.id}\'>` }'}
                         <span class="option-text">${option.text}</span>
                         <span class="vote-count" id="votes-${option.id}">${option._count.votes}</span>
                     </div>
@@ -385,6 +387,18 @@ function displayPolls(polls) {
     // Join rooms for all rendered polls to receive updates
     if (socket) {
         polls.forEach(p => socket.emit('joinPoll', p.id));
+    }
+}
+
+// For multi-select polls: submit vote per click, toggling adds/removes vote on that option
+async function toggleSelect(optionId, pollId) {
+    const input = document.querySelector(`input[name="poll-${pollId}"][value="${optionId}"]`);
+    if (!input) return;
+    if (input.checked) {
+        await vote(optionId, pollId);
+    } else {
+        // Optional: implement unvote endpoint later; for now ignore uncheck
+        await vote(optionId, pollId);
     }
 }
 

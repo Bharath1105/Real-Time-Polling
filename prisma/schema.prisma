@@ -32,6 +32,7 @@ model Poll {
   id          String   @id @default(cuid())
   question    String
   isPublished Boolean  @default(false)
+  allowMultiple Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

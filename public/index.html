@@ -241,6 +241,20 @@
             margin-top: 10px;
         }
 
+        /* Inline checkbox + label row for allow-multiple */
+        .allow-multiple {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .allow-multiple label {
+            margin: 0;
+            font-weight: 600;
+            color: #333;
+        }
+
         .user-info {
             background: #e3f2fd;
             padding: 15px;
@@ -408,6 +422,10 @@
                                 <input type="text" placeholder="Option 2" class="poll-option">
                                 <button class="remove-option" onclick="removeOption(this)">×</button>
                             </div>
+                        </div>
+                        <div class="allow-multiple">
+                            <input type="checkbox" id="allowMultiple">
+                            <label for="allowMultiple">Allow selecting multiple options</label>
                         </div>
                         <button class="add-option" onclick="addOption()">+ Add Option</button>
                     </div>
