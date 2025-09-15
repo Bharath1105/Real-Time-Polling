@@ -360,8 +360,8 @@ function displayPolls(polls) {
             <div class="poll-question">${poll.question}</div>
             <div class="poll-options">
                 ${poll.options.map(option => `
-                    <div class="option" onclick="${'${poll.allowMultiple ? `toggleSelect(\'' + option.id + '\', \'${poll.id}\')` : `vote(\'' + option.id + '\', \'${poll.id}\')` }'}">
-                        ${'${poll.allowMultiple ? `<input type=\'checkbox\' name=\'poll-${poll.id}\' value=\'${option.id}\'>` : `<input type=\'radio\' name=\'poll-${poll.id}\' value=\'${option.id}\'>` }'}
+                    <div class="option" onclick="${poll.allowMultiple ? `toggleSelect('${option.id}', '${poll.id}')` : `vote('${option.id}', '${poll.id}')`}">
+                        ${poll.allowMultiple ? `<input type="checkbox" name="poll-${poll.id}" value="${option.id}">` : `<input type="radio" name="poll-${poll.id}" value="${option.id}">`}
                         <span class="option-text">${option.text}</span>
                         <span class="vote-count" id="votes-${option.id}">${option._count.votes}</span>
                     </div>
