@@ -5,7 +5,7 @@ let socket = null;
 let currentPollId = null;
 
 // Server configuration
-const SERVER_URL = 'https://real-time-polling.onrender.com';
+const SERVER_URL = window.location.origin;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -363,6 +363,10 @@ function displayPolls(polls) {
                         <span class="option-text">${option.text}</span>
                         <span class="vote-count" id="votes-${option.id}">${option._count.votes}</span>
                     </div>
+                    <div style="margin: 5px 0 15px 10px;">
+                        <button class=\"btn btn-secondary\" style=\"padding:6px 10px;\" onclick=\"toggleVoters(event, '${poll.id}', '${option.id}')\">Show voters</button>
+                        <div id="voters-${option.id}" style="display:none; padding:10px 12px; background:#f1f3f5; border-radius:8px; margin-top:8px;"></div>
+                    </div>
                 `).join('')}
             </div>
             <div class="poll-meta">
@@ -371,9 +375,44 @@ function displayPolls(polls) {
                     ${poll.isPublished ? 'Published' : 'Draft'}
                 </span>
                 <span>${new Date(poll.createdAt).toLocaleDateString()}</span>
+                ${currentUser && currentUser.id === poll.creator.id ? `
+                    <button class=\"btn btn-secondary\" style=\"margin-left: 10px;\" onclick=\"deletePoll('${poll.id}')\">Delete</button>
+                ` : ''}
             </div>
         </div>
     `).join('');
+
+    // Join rooms for all rendered polls to receive updates
+    if (socket) {
+        polls.forEach(p => socket.emit('joinPoll', p.id));
+    }
+}
+
+async function deletePoll(pollId) {
+    if (!authToken) {
+        showError('Please login');
+        return;
+    }
+    if (!confirm('Delete this poll? This cannot be undone.')) {
+        return;
+    }
+    try {
+        const response = await fetch(`${SERVER_URL}/api/polls/${pollId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        if (response.status === 204) {
+            showSuccess('Poll deleted');
+            loadPolls();
+        } else {
+            const data = await response.json();
+            showError(data.error || 'Failed to delete poll');
+        }
+    } catch (error) {
+        showError('Network error. Please try again.');
+    }
 }
 
 async function vote(optionId, pollId) {
@@ -407,7 +446,7 @@ async function vote(optionId, pollId) {
 
 // WebSocket functions
 function connectWebSocket() {
-    socket = io(SERVER_URL);
+    socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
     
     socket.on('connect', () => {
         console.log('Connected to WebSocket server');
@@ -429,6 +468,18 @@ function connectWebSocket() {
         console.log('Received real-time poll results:', data);
         updatePollResults(data);
     });
+
+    socket.on('pollPublished', () => {
+        loadPolls();
+    });
+
+    socket.on('pollDeleted', (data) => {
+        const card = document.querySelector(`[data-poll-id="${data.pollId}"]`);
+        if (card) {
+            card.remove();
+        }
+        loadPolls();
+    });
 }
 
 function updatePollResults(data) {
@@ -442,6 +493,40 @@ function updatePollResults(data) {
     
     // Show a subtle notification
     showSuccess('Poll results updated in real-time!');
+}
+
+async function toggleVoters(event, pollId, optionId) {
+    event.stopPropagation();
+    const container = document.getElementById(`voters-${optionId}`);
+    if (!container) return;
+
+    if (container.dataset.loaded === 'true') {
+        // Just toggle visibility
+        container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        event.target.textContent = container.style.display === 'none' ? 'Show voters' : 'Hide voters';
+        return;
+    }
+
+    try {
+        const response = await fetch(`${SERVER_URL}/api/polls/${pollId}/votes`);
+        const data = await response.json();
+        if (response.ok) {
+            const option = data.options.find(o => o.id === optionId);
+            const names = option && option.voters.length
+                ? option.voters.map(u => u.name || 'Anonymous').join(', ')
+                : 'No votes yet';
+            container.textContent = names;
+            container.dataset.loaded = 'true';
+            container.style.display = 'block';
+            event.target.textContent = 'Hide voters';
+        } else {
+            container.textContent = 'Failed to load voters';
+            container.style.display = 'block';
+        }
+    } catch (e) {
+        container.textContent = 'Network error loading voters';
+        container.style.display = 'block';
+    }
 }
 
 // Utility functions

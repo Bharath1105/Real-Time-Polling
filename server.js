@@ -434,14 +434,14 @@ app.post('/api/polls', authenticateToken, async (req, res) => {
     });
 
     logger.poll('POLL_CREATED', poll.id, {
-      userId: user.id,
+      userId: req.user.userId,
       question: poll.question,
       optionsCount: poll.options.length,
       isPublished: poll.isPublished
     });
     res.status(201).json(poll);
   } catch (error) {
-    logger.error('Error creating poll:', error, { userId: user.id });
+    logger.error('Error creating poll:', error, { userId: req.user ? req.user.userId : null });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -521,6 +521,49 @@ app.get('/api/polls/:id', async (req, res) => {
   }
 });
 
+// Voters for each option in a poll (names only)
+app.get('/api/polls/:id/votes', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const poll = await prisma.poll.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        options: {
+          select: {
+            id: true,
+            text: true,
+            votes: {
+              select: {
+                user: { select: { id: true, name: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!poll) {
+      return res.status(404).json({ error: 'Poll not found' });
+    }
+
+    const result = {
+      pollId: poll.id,
+      options: poll.options.map(opt => ({
+        id: opt.id,
+        text: opt.text,
+        voters: opt.votes.map(v => v.user)
+      }))
+    };
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Error fetching poll voters:', error, { pollId: req.params.id });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.patch('/api/polls/:id/publish', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -558,10 +601,11 @@ app.patch('/api/polls/:id/publish', authenticateToken, async (req, res) => {
       }
     });
 
-    logger.poll('POLL_PUBLISHED', pollId, {
-      userId: user.id,
+    const totalVotes = updatedPoll.options.reduce((sum, opt) => sum + (opt._count ? opt._count.votes : 0), 0);
+    logger.poll('POLL_PUBLISHED', updatedPoll.id, {
+      userId: req.user.userId,
       question: updatedPoll.question,
-      totalVotes: updatedPoll.totalVotes
+      totalVotes
     });
     
     // Emit real-time update to all connected clients
@@ -573,7 +617,37 @@ app.patch('/api/polls/:id/publish', authenticateToken, async (req, res) => {
     
     res.json(updatedPoll);
   } catch (error) {
-    logger.error('Error publishing poll:', error, { pollId, userId: user.id });
+    logger.error('Error publishing poll:', error, { pollId: req.params.id, userId: req.user ? req.user.userId : null });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete a poll (only creator can delete)
+app.delete('/api/polls/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Ensure the authenticated user owns the poll
+    const poll = await prisma.poll.findFirst({
+      where: { id, creatorId: req.user.userId },
+      include: { options: { select: { id: true } } }
+    });
+
+    if (!poll) {
+      return res.status(404).json({ error: 'Poll not found or you do not have permission to delete it' });
+    }
+
+    // Delete the poll (options and votes should cascade if configured)
+    await prisma.poll.delete({ where: { id } });
+
+    logger.poll('POLL_DELETED', id, { userId: req.user.userId });
+
+    // Notify clients to refresh
+    io.emit('pollDeleted', { pollId: id });
+
+    res.status(204).send();
+  } catch (error) {
+    logger.error('Error deleting poll:', error, { pollId: req.params.id, userId: req.user ? req.user.userId : null });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -667,24 +741,16 @@ app.post('/api/votes', authenticateToken, async (req, res) => {
       }))
     });
 
-    logger.poll('VOTE_CAST', pollId, {
-      userId: user.id,
-      optionId: optionId,
-      pollQuestion: poll.question,
-      optionText: option.text
-    });
-    
-    // Emit real-time update to all clients in the poll room
-    io.to(`poll-${pollId}`).emit('voteCast', {
-      pollId: pollId,
-      optionId: optionId,
-      totalVotes: poll.totalVotes,
-      optionVotes: option.votes
+    logger.poll('VOTE_CAST', pollOption.poll.id, {
+      userId: req.user.userId,
+      optionId: pollOptionId,
+      pollQuestion: pollOption.poll.question,
+      optionText: pollOption.text
     });
     
     res.status(201).json(vote);
   } catch (error) {
-    logger.error('Error creating vote:', error, { pollId, userId: user.id, optionId });
+    logger.error('Error creating vote:', error, { pollId: pollOption ? pollOption.poll.id : null, userId: req.user ? req.user.userId : null, optionId: req.body ? req.body.pollOptionId : null });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
